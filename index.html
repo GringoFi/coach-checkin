@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0f766e" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Coach Check-In</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#141d2e; --card2:#1c2740; --line:#27324a;
+    --text:#e8edf6; --muted:#93a0ba; --accent:#2dd4bf; --accent2:#0f766e;
+    --good:#34d399; --warn:#fbbf24; --bad:#f87171; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); line-height:1.5;
+    -webkit-text-size-adjust:100%; padding-bottom:90px;
+  }
+  header{
+    position:sticky; top:0; z-index:20; background:rgba(11,18,32,.92);
+    backdrop-filter:saturate(140%) blur(8px); border-bottom:1px solid var(--line);
+    padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;
+  }
+  header h1{font-size:18px; margin:0; letter-spacing:.2px}
+  header .sub{font-size:12px; color:var(--muted); margin-top:2px}
+  main{max-width:760px; margin:0 auto; padding:16px}
+  .view{display:none} .view.active{display:block}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:14px}
+  .card h2{font-size:15px; margin:0 0 4px; text-transform:uppercase; letter-spacing:.6px; color:var(--accent)}
+  .card .hint{font-size:12px; color:var(--muted); margin:0 0 12px}
+  label.field{display:block; margin:12px 0}
+  label.field > span{display:block; font-size:13px; color:var(--muted); margin-bottom:5px}
+  input[type=text],input[type=number],input[type=email],input[type=date],input[type=time],select,textarea{
+    width:100%; background:var(--card2); color:var(--text); border:1px solid var(--line);
+    border-radius:10px; padding:11px 12px; font-size:16px; font-family:inherit;
+  }
+  textarea{min-height:90px; resize:vertical}
+  input:focus,select:focus,textarea:focus{outline:none; border-color:var(--accent)}
+  .row{display:flex; gap:10px} .row > *{flex:1}
+  .meal, .toggle{
+    display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--line);
+    border-radius:10px; background:var(--card2); margin-bottom:8px; cursor:pointer; user-select:none;
+  }
+  .meal.checked,.toggle.checked{border-color:var(--accent); background:rgba(45,212,191,.10)}
+  .meal .box,.toggle .box{
+    width:24px;height:24px;border-radius:7px;border:2px solid var(--muted);
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;font-size:15px;color:#0b1220
+  }
+  .meal.checked .box,.toggle.checked .box{background:var(--accent);border-color:var(--accent)}
+  .meal .label{flex:1} .meal .label small{display:block;color:var(--muted);font-size:12px}
+  .counter{display:flex;align-items:center;gap:10px}
+  .counter button{
+    width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:var(--card2);
+    color:var(--text);font-size:22px;cursor:pointer
+  }
+  .counter .val{flex:1;text-align:center}
+  .counter .val b{font-size:22px} .counter .val small{display:block;color:var(--muted);font-size:12px}
+  .bar{height:8px;background:var(--card2);border-radius:6px;overflow:hidden;margin-top:8px}
+  .bar > i{display:block;height:100%;background:var(--accent);width:0%}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;
+    background:var(--accent);color:#04201d;border:none;border-radius:12px;padding:14px;
+    font-size:16px;font-weight:700;cursor:pointer;font-family:inherit
+  }
+  .btn.secondary{background:var(--card2);color:var(--text);border:1px solid var(--line);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent2)}
+  .btn + .btn{margin-top:10px}
+  .pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;background:var(--card2);color:var(--muted);border:1px solid var(--line)}
+  .stat{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--line);font-size:14px}
+  .stat:last-child{border-bottom:none} .stat b{color:var(--text)}
+  .targets{font-size:12px;color:var(--muted)}
+  .targets li{margin:2px 0}
+  nav{
+    position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;background:rgba(11,18,32,.96);
+    border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)
+  }
+  nav button{
+    flex:1;background:none;border:none;color:var(--muted);padding:12px 4px 14px;font-size:11px;
+    font-family:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px
+  }
+  nav button .ic{font-size:20px;line-height:1}
+  nav button.active{color:var(--accent)}
+  .toast{
+    position:fixed;left:50%;bottom:96px;transform:translateX(-50%) translateY(20px);
+    background:var(--accent);color:#04201d;font-weight:700;padding:12px 18px;border-radius:12px;
+    opacity:0;pointer-events:none;transition:.25s;z-index:50;max-width:88%;text-align:center
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .dim{color:var(--muted);font-size:12px}
+  .save-row{display:flex;gap:10px;align-items:center;margin-top:14px}
+  .save-row .saved{font-size:12px;color:var(--good)}
+  hr{border:none;border-top:1px solid var(--line);margin:16px 0}
+  .num-suffix{position:relative}
+  .num-suffix span.suf{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="hdrTitle">Coach Check-In</h1>
+  <div class="sub" id="hdrSub">Daily tracking &amp; weekly check-in</div>
+</header>
+
+<main>
+  <!-- ================= DAILY ================= -->
+  <section id="view-daily" class="view active">
+    <div class="card">
+      <label class="field" style="margin:0">
+        <span>Day</span>
+        <input type="date" id="d-date" />
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>Meals</h2>
+      <p class="hint">Tap each meal as you eat it. Feeds your weekly “% diet followed”.</p>
+      <div id="meals"></div>
+    </div>
+
+    <div class="card">
+      <h2>Steps</h2>
+      <p class="hint">Goal: 8,000–10,000 / day</p>
+      <label class="field" style="margin:0">
+        <input type="number" id="d-steps" inputmode="numeric" placeholder="e.g. 9200" min="0" />
+      </label>
+      <div class="bar"><i id="d-steps-bar"></i></div>
+    </div>
+
+    <div class="card">
+      <h2>Water</h2>
+      <p class="hint">Minimum: 3.0 L / day</p>
+      <div class="counter">
+        <button type="button" data-water="-250">−</button>
+        <div class="val"><b id="d-water-l">0.0 L</b><small id="d-water-oz">0 oz of 3 L</small></div>
+        <button type="button" data-water="250">+</button>
+      </div>
+      <div class="bar"><i id="d-water-bar"></i></div>
+      <div class="dim" style="text-align:center;margin-top:8px">Each tap = 250 mL (≈ 8.5 oz)</div>
+    </div>
+
+    <div class="card">
+      <h2>Cardio &amp; Training</h2>
+      <p class="hint">Split: CrossFit 3× / wk + 1 designated weight session. Cardio: 15 min, 5×/wk, RPE 6–7.</p>
+      <div class="toggle" data-toggle="cardio"><div class="box">✓</div><div class="label">Cardio done</div></div>
+      <div class="toggle" data-toggle="crossfit"><div class="box">✓</div><div class="label">CrossFit</div></div>
+      <div class="toggle" data-toggle="weights"><div class="box">✓</div><div class="label">Weight training</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Weigh-In</h2>
+      <p class="hint">Auto-fills your weekly start/end weight + the time it was taken.</p>
+      <div class="row">
+        <label class="field" style="margin:0">
+          <span>Weight (lb)</span>
+          <input type="number" id="d-weight" inputmode="decimal" step="0.1" placeholder="e.g. 184.6" />
+        </label>
+        <label class="field" style="margin:0">
+          <span>Time taken</span>
+          <input type="time" id="d-weight-time" />
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Sleep &amp; Supplements</h2>
+      <div class="row">
+        <label class="field" style="margin:0">
+          <span>Sleep (hours)</span>
+          <input type="number" id="d-sleep" inputmode="decimal" step="0.1" placeholder="e.g. 7.5" />
+        </label>
+      </div>
+      <div class="toggle" data-toggle="supps" style="margin-top:12px"><div class="box">✓</div><div class="label">Protein / supplements taken</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Daily Note</h2>
+      <p class="hint">Anything worth flagging — rolls up into your weekly comments.</p>
+      <textarea id="d-note" placeholder="• felt strong on squats&#10;• low energy after lunch"></textarea>
+    </div>
+
+    <button class="btn" id="d-save">Save day</button>
+    <div class="save-row"><span class="saved" id="d-saved"></span></div>
+  </section>
+
+  <!-- ================= WEEKLY ================= -->
+  <section id="view-weekly" class="view">
+    <div class="card">
+      <h2>This Week (auto)</h2>
+      <p class="hint">Pulled from your last 7 days of daily logs on this device.</p>
+      <div id="w-summary"></div>
+      <button class="btn ghost" id="w-prefill" style="margin-top:12px">↺ Prefill form from this week</button>
+    </div>
+
+    <div class="card">
+      <h2>Check-In · last 5–7 days</h2>
+      <p class="hint">Everything below is included in the email to your coach.</p>
+
+      <div class="row">
+        <label class="field"><span>Starting weight (lb)</span><input type="number" step="0.1" id="w-startw" inputmode="decimal"></label>
+        <label class="field"><span>Time / date taken</span><input type="text" id="w-startt" placeholder="7:00am, 5/24"></label>
+      </div>
+      <div class="row">
+        <label class="field"><span>Ending weight (lb)</span><input type="number" step="0.1" id="w-endw" inputmode="decimal"></label>
+        <label class="field"><span>Time / date taken</span><input type="text" id="w-endt" placeholder="7:00am, 5/31"></label>
+      </div>
+
+      <label class="field"><span>Changes in normal sleep patterns from your baseline?</span><textarea id="w-sleep"></textarea></label>
+      <label class="field"><span>Hunger 1–10 (1 = no hunger / 10 = starving)</span><input type="number" id="w-hunger" min="1" max="10" inputmode="numeric"></label>
+
+      <div class="row">
+        <label class="field"><span>Cardio sessions missed</span><input type="number" id="w-cardiomiss" min="0" inputmode="numeric"></label>
+        <label class="field"><span>Weight-training sessions missed</span><input type="number" id="w-trainmiss" min="0" inputmode="numeric"></label>
+      </div>
+      <label class="field"><span>% Diet followed</span>
+        <div class="num-suffix"><input type="number" id="w-diet" min="0" max="100" inputmode="numeric"><span class="suf">%</span></div>
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>Performance · vs last week</h2>
+      <label class="field"><span>Stamina &amp; energy in the gym 1–10 (1 = Terrible / 10 = Great)</span><input type="number" id="w-stamina" min="1" max="10" inputmode="numeric"></label>
+      <label class="field"><span>Strength changes</span>
+        <select id="w-strength">
+          <option value="">—</option><option>Regressing</option><option>Stagnant</option><option>Progressing</option>
+        </select>
+      </label>
+      <label class="field"><span>Pumps 1–10 (1 = Terrible / 10 = Great)</span><input type="number" id="w-pumps" min="1" max="10" inputmode="numeric"></label>
+      <label class="field"><span>Increased / decreased energy during the day?</span>
+        <select id="w-dayenergy">
+          <option value="">—</option><option>Increased</option><option>About the same</option><option>Decreased</option>
+        </select>
+      </label>
+      <label class="field"><span>Muscle soreness lasting &gt;2 days post-training a body part?</span>
+        <select id="w-soreness"><option value="">—</option><option>No</option><option>Yes</option></select>
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>Digestion / Bloating · vs last week</h2>
+      <label class="field"><span>Digestion, bloating, gas changes from your baseline?</span><textarea id="w-digestion"></textarea></label>
+      <label class="field"><span>Daily BM?</span>
+        <select id="w-bm"><option value="">—</option><option>Yes</option><option>No</option></select>
+      </label>
+      <label class="field"><span>Comments (bullet points, NOT paragraph form)</span>
+        <textarea id="w-comments" placeholder="• &#10;• "></textarea>
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>Send</h2>
+      <button class="btn" id="w-email">✉️ Open email to coach</button>
+      <button class="btn secondary" id="w-copy">⧉ Copy check-in text</button>
+      <p class="dim" style="margin-top:10px">Opens your Mail app pre-filled. If your phone has no default mail app, use “Copy” and paste into any email.</p>
+    </div>
+  </section>
+
+  <!-- ================= SETTINGS ================= -->
+  <section id="view-settings" class="view">
+    <div class="card">
+      <h2>Setup</h2>
+      <label class="field"><span>Your name</span><input type="text" id="s-name" placeholder="Sal Scifo"></label>
+      <label class="field"><span>Coach's email</span><input type="email" id="s-coach" placeholder="coach@example.com"></label>
+      <label class="field"><span>Email subject prefix</span><input type="text" id="s-subject" placeholder="Weekly Check-In"></label>
+      <button class="btn secondary" id="s-save">Save setup</button>
+    </div>
+
+    <div class="card">
+      <h2>Backup &amp; Sync</h2>
+      <p class="hint">Data is stored on this device. To move between iPhone and Mac, export here and import on the other device.</p>
+      <button class="btn secondary" id="s-export">⬇︎ Export backup (.json)</button>
+      <button class="btn secondary" id="s-import">⬆︎ Import backup</button>
+      <input type="file" id="s-file" accept="application/json" hidden>
+    </div>
+
+    <div class="card">
+      <h2>Targets (reference)</h2>
+      <ul class="targets">
+        <li>Water: 3 L minimum / day</li>
+        <li>Steps: 8k–10k / day</li>
+        <li>Cardio: 15 min, 5×/week, RPE 6–7</li>
+        <li>Training: CrossFit 3×/week + 1 designated weight session</li>
+        <li>Caffeine ≤ 400 mg/day, none after 3pm · diet drinks 2–3/day max</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Danger zone</h2>
+      <button class="btn ghost" id="s-clearday">Clear the currently selected day</button>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button data-nav="daily" class="active"><span class="ic">📅</span>Daily</button>
+  <button data-nav="weekly"><span class="ic">📝</span>Weekly</button>
+  <button data-nav="settings"><span class="ic">⚙️</span>Setup</button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  const $ = s => document.querySelector(s);
+  const LS = {
+    logs: "cci_dailyLogs_v1",
+    settings: "cci_settings_v1"
+  };
+  const MEALS = [
+    {t:"Meal 1", s:"Beef/eggs + chicken/isolate + veg + fruit"},
+    {t:"Meal 2", s:"Chicken + rice + veg + fat"},
+    {t:"Meal 3", s:"Protein + carbs + fruit + fat"},
+    {t:"Meal 4", s:"Protein + carb + exchange + veg"}
+  ];
+  const WATER_GOAL_ML = 3000;
+
+  // ---------- storage ----------
+  function loadLogs(){ try{ return JSON.parse(localStorage.getItem(LS.logs)) || {}; }catch(e){ return {}; } }
+  function saveLogs(o){ localStorage.setItem(LS.logs, JSON.stringify(o)); }
+  function loadSettings(){ try{ return JSON.parse(localStorage.getItem(LS.settings)) || {}; }catch(e){ return {}; } }
+  function saveSettings(o){ localStorage.setItem(LS.settings, JSON.stringify(o)); }
+
+  function todayStr(){
+    const d = new Date(); const off = d.getTimezoneOffset();
+    return new Date(d.getTime() - off*60000).toISOString().slice(0,10);
+  }
+  function blankDay(){
+    return { meals:[false,false,false,false], steps:"", waterMl:0,
+      cardio:false, crossfit:false, weights:false,
+      weight:"", weightTime:"", sleep:"", supps:false, note:"" };
+  }
+  function hasData(d){
+    if(!d) return false;
+    return (d.meals||[]).some(Boolean) || (d.steps!=="" && d.steps!=null) ||
+      (d.waterMl||0)>0 || d.cardio || d.crossfit || d.weights ||
+      (d.weight!=="" && d.weight!=null) || (d.sleep!=="" && d.sleep!=null) ||
+      d.supps || (d.note && d.note.trim());
+  }
+
+  let logs = loadLogs();
+  let settings = loadSettings();
+  let curDate = todayStr();
+
+  // ---------- toast ----------
+  let toastTimer;
+  function toast(msg){
+    const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove("show"), 1700);
+  }
+
+  // ---------- nav ----------
+  document.querySelectorAll("nav button").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      const v = b.dataset.nav;
+      document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("active", x===b));
+      document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
+      $("#view-"+v).classList.add("active");
+      const titles = {daily:"Daily Tracking", weekly:"Weekly Check-In", settings:"Setup & Backup"};
+      $("#hdrSub").textContent = titles[v];
+      if(v==="weekly") renderWeeklySummary();
+      window.scrollTo(0,0);
+    });
+  });
+
+  // ---------- DAILY ----------
+  const mealsWrap = $("#meals");
+  MEALS.forEach((m,i)=>{
+    const el = document.createElement("div");
+    el.className = "meal"; el.dataset.meal = i;
+    el.innerHTML = '<div class="box">✓</div><div class="label">'+m.t+'<small>'+m.s+'</small></div>';
+    el.addEventListener("click", ()=>{
+      const day = getDay(); day.meals[i] = !day.meals[i];
+      setDay(day); renderDaily();
+    });
+    mealsWrap.appendChild(el);
+  });
+
+  document.querySelectorAll("[data-toggle]").forEach(t=>{
+    t.addEventListener("click", ()=>{
+      const k = t.dataset.toggle; const day = getDay(); day[k] = !day[k];
+      setDay(day); renderDaily();
+    });
+  });
+  document.querySelectorAll("[data-water]").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      const day = getDay();
+      day.waterMl = Math.max(0, (day.waterMl||0) + parseInt(b.dataset.water,10));
+      setDay(day); renderDaily();
+    });
+  });
+
+  function bindInput(id, key, opts){
+    opts = opts || {};
+    $(id).addEventListener("input", ()=>{
+      const day = getDay();
+      day[key] = $(id).value;
+      setDay(day, true); // silent (don't toast on every keystroke)
+      if(opts.live) renderBars();
+    });
+  }
+  bindInput("#d-steps","steps",{live:true});
+  bindInput("#d-weight","weight");
+  bindInput("#d-weight-time","weightTime");
+  bindInput("#d-sleep","sleep");
+  bindInput("#d-note","note");
+
+  $("#d-date").addEventListener("change", ()=>{ curDate = $("#d-date").value || todayStr(); renderDaily(); });
+  $("#d-save").addEventListener("click", ()=>{ saveLogs(logs); $("#d-saved").textContent = "Saved ✓ "+curDate; toast("Day saved"); });
+
+  function getDay(){ if(!logs[curDate]) logs[curDate] = blankDay(); return logs[curDate]; }
+  function setDay(day, silent){ logs[curDate] = day; saveLogs(logs); if(!silent) $("#d-saved").textContent=""; }
+
+  function renderBars(){
+    const day = getDay();
+    const steps = parseInt(day.steps,10)||0;
+    $("#d-steps-bar").style.width = Math.min(100, steps/10000*100)+"%";
+    const ml = day.waterMl||0;
+    $("#d-water-bar").style.width = Math.min(100, ml/WATER_GOAL_ML*100)+"%";
+    $("#d-water-l").textContent = (ml/1000).toFixed(1)+" L";
+    $("#d-water-oz").textContent = Math.round(ml/29.5735)+" oz of 3 L";
+  }
+
+  function renderDaily(){
+    const day = getDay();
+    $("#d-date").value = curDate;
+    document.querySelectorAll(".meal").forEach((el,i)=>el.classList.toggle("checked", !!day.meals[i]));
+    document.querySelectorAll("[data-toggle]").forEach(t=>t.classList.toggle("checked", !!day[t.dataset.toggle]));
+    $("#d-steps").value = day.steps||"";
+    $("#d-weight").value = day.weight||"";
+    $("#d-weight-time").value = day.weightTime||"";
+    $("#d-sleep").value = day.sleep||"";
+    $("#d-note").value = day.note||"";
+    renderBars();
+  }
+
+  // ---------- WEEKLY aggregation ----------
+  function last7(){
+    const days = [];
+    const base = new Date(curDate+"T00:00:00");
+    for(let i=0;i<7;i++){
+      const d = new Date(base.getTime() - i*86400000);
+      const off = d.getTimezoneOffset();
+      const key = new Date(d.getTime()-off*60000).toISOString().slice(0,10);
+      if(logs[key] && hasData(logs[key])) days.push({key, ...logs[key]});
+    }
+    return days.reverse();
+  }
+  function weekAgg(){
+    const ds = last7();
+    const n = ds.length;
+    let mealsHit=0, mealsPoss=n*4, steps=[], water=[], cardioDays=0, trainDays=0, sleep=[];
+    let weights=[]; // {weight, time, key}
+    ds.forEach(d=>{
+      mealsHit += (d.meals||[]).filter(Boolean).length;
+      if(d.steps!=="" && d.steps!=null) steps.push(parseInt(d.steps,10)||0);
+      if(d.waterMl) water.push(d.waterMl);
+      if(d.cardio) cardioDays++;
+      if(d.crossfit||d.weights) trainDays++;
+      if(d.sleep!=="" && d.sleep!=null) sleep.push(parseFloat(d.sleep)||0);
+      if(d.weight!=="" && d.weight!=null) weights.push({w:d.weight, t:d.weightTime, key:d.key});
+    });
+    const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
+    return {
+      n, mealsHit, mealsPoss,
+      dietPct: mealsPoss ? Math.round(mealsHit/mealsPoss*100) : null,
+      avgSteps: avg(steps), avgWaterL: water.length ? avg(water)/1000 : null,
+      cardioDays, trainDays,
+      cardioMissed: Math.max(0, 5 - cardioDays),   // target 5/wk
+      trainMissed: Math.max(0, 4 - trainDays),     // target 4/wk (3 CF + 1 wt)
+      avgSleep: avg(sleep),
+      firstWeight: weights[0]||null, lastWeight: weights[weights.length-1]||null
+    };
+  }
+
+  function fmtDate(key){ const [y,m,d]=key.split("-"); return m+"/"+d; }
+
+  function renderWeeklySummary(){
+    const a = weekAgg();
+    const rows = [
+      ["Days logged", a.n+" / 7"],
+      ["Meals hit", a.mealsHit+" / "+a.mealsPoss + (a.dietPct!=null?" ("+a.dietPct+"%)":"")],
+      ["Avg steps", a.avgSteps!=null? Math.round(a.avgSteps).toLocaleString():"—"],
+      ["Avg water", a.avgWaterL!=null? a.avgWaterL.toFixed(1)+" L":"—"],
+      ["Cardio days", a.cardioDays+" (missed "+a.cardioMissed+")"],
+      ["Training days", a.trainDays+" (missed "+a.trainMissed+")"],
+      ["Avg sleep", a.avgSleep!=null? a.avgSleep.toFixed(1)+" h":"—"]
+    ];
+    $("#w-summary").innerHTML = rows.map(r=>'<div class="stat"><span>'+r[0]+'</span><b>'+r[1]+'</b></div>').join("");
+  }
+
+  $("#w-prefill").addEventListener("click", ()=>{
+    const a = weekAgg();
+    if(a.dietPct!=null) $("#w-diet").value = a.dietPct;
+    $("#w-cardiomiss").value = a.cardioMissed;
+    $("#w-trainmiss").value = a.trainMissed;
+    if(a.firstWeight){ $("#w-startw").value = a.firstWeight.w; $("#w-startt").value = (a.firstWeight.t||"") + (a.firstWeight.t?", ":"") + fmtDate(a.firstWeight.key); }
+    if(a.lastWeight){ $("#w-endw").value = a.lastWeight.w; $("#w-endt").value = (a.lastWeight.t||"") + (a.lastWeight.t?", ":"") + fmtDate(a.lastWeight.key); }
+    if(a.avgSleep!=null && !$("#w-sleep").value) $("#w-sleep").value = "Avg "+a.avgSleep.toFixed(1)+" h this week.";
+    // gather daily notes into comments
+    const notes = last7().filter(d=>d.note && d.note.trim()).map(d=>"• ("+fmtDate(d.key)+") "+d.note.trim().replace(/\n+/g," / "));
+    if(notes.length && !$("#w-comments").value.trim()) $("#w-comments").value = notes.join("\n");
+    toast("Prefilled from this week");
+  });
+
+  // ---------- build + send check-in ----------
+  function v(id){ return ($(id).value||"").trim(); }
+  function buildText(){
+    const a = weekAgg();
+    const name = settings.name || "";
+    const L = [];
+    L.push("WEEKLY CHECK-IN"+(name?" — "+name:"")+" — "+curDate);
+    L.push("");
+    L.push("— Last 5–7 days —");
+    L.push("Starting weight (+ time): "+ (v("#w-startw")? v("#w-startw")+" lb"+(v("#w-startt")?" @ "+v("#w-startt"):"") : "—"));
+    L.push("Ending weight (+ time): "+ (v("#w-endw")? v("#w-endw")+" lb"+(v("#w-endt")?" @ "+v("#w-endt"):"") : "—"));
+    L.push("Sleep pattern changes vs baseline: "+ (v("#w-sleep")||"—"));
+    L.push("Hunger (1–10): "+ (v("#w-hunger")||"—"));
+    L.push("Cardio sessions missed: "+ (v("#w-cardiomiss")||"0"));
+    L.push("Weight-training sessions missed: "+ (v("#w-trainmiss")||"0"));
+    L.push("% Diet followed: "+ (v("#w-diet")? v("#w-diet")+"%":"—"));
+    L.push("");
+    L.push("— Performance (vs last week) —");
+    L.push("Stamina & energy in gym (1–10): "+ (v("#w-stamina")||"—"));
+    L.push("Strength changes: "+ (v("#w-strength")||"—"));
+    L.push("Pumps (1–10): "+ (v("#w-pumps")||"—"));
+    L.push("Daytime energy: "+ (v("#w-dayenergy")||"—"));
+    L.push("Soreness >2 days post-training: "+ (v("#w-soreness")||"—"));
+    L.push("");
+    L.push("— Digestion / Bloating (vs last week) —");
+    L.push("Digestion/bloating/gas vs baseline: "+ (v("#w-digestion")||"—"));
+    L.push("Daily BM: "+ (v("#w-bm")||"—"));
+    L.push("");
+    L.push("— Comments —");
+    L.push(v("#w-comments")||"• —");
+    L.push("");
+    L.push("— Daily averages (auto, this device) —");
+    L.push("Meals hit: "+a.mealsHit+"/"+a.mealsPoss+(a.dietPct!=null?" ("+a.dietPct+"%)":""));
+    L.push("Avg steps: "+(a.avgSteps!=null?Math.round(a.avgSteps).toLocaleString():"—")+" (goal 8–10k)");
+    L.push("Avg water: "+(a.avgWaterL!=null?a.avgWaterL.toFixed(1)+" L":"—")+" (goal 3 L)");
+    L.push("Cardio days: "+a.cardioDays+" · Training days: "+a.trainDays);
+    L.push("Avg sleep: "+(a.avgSleep!=null?a.avgSleep.toFixed(1)+" h":"—"));
+    return L.join("\n");
+  }
+
+  $("#w-email").addEventListener("click", ()=>{
+    const body = buildText();
+    const subj = (settings.subject||"Weekly Check-In") + (settings.name?" — "+settings.name:"") + " — " + curDate;
+    const to = settings.coach || "";
+    const href = "mailto:"+encodeURIComponent(to)+"?subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(body);
+    if(!to){ toast("Add coach's email in Setup first"); }
+    // mailto length safety: if very long, warn and copy instead
+    if(href.length > 1900){
+      copyText(body); toast("Long check-in — copied instead. Paste into email.");
+      return;
+    }
+    window.location.href = href;
+  });
+
+  function copyText(text){
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(()=>toast("Copied to clipboard"),()=>fallbackCopy(text));
+    } else { fallbackCopy(text); }
+  }
+  function fallbackCopy(text){
+    const ta = document.createElement("textarea"); ta.value = text;
+    ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try{ document.execCommand("copy"); toast("Copied to clipboard"); }catch(e){ toast("Couldn't copy — select & copy manually"); }
+    document.body.removeChild(ta);
+  }
+  $("#w-copy").addEventListener("click", ()=> copyText(buildText()));
+
+  // ---------- SETTINGS ----------
+  function renderSettings(){
+    $("#s-name").value = settings.name||"";
+    $("#s-coach").value = settings.coach||"";
+    $("#s-subject").value = settings.subject||"Weekly Check-In";
+  }
+  $("#s-save").addEventListener("click", ()=>{
+    settings.name = v("#s-name"); settings.coach = v("#s-coach");
+    settings.subject = v("#s-subject")||"Weekly Check-In";
+    saveSettings(settings); toast("Setup saved");
+  });
+  $("#s-export").addEventListener("click", ()=>{
+    const data = JSON.stringify({version:1, settings, logs}, null, 2);
+    const blob = new Blob([data], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "coach-checkin-backup-"+todayStr()+".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 1000); toast("Backup exported");
+  });
+  $("#s-import").addEventListener("click", ()=> $("#s-file").click());
+  $("#s-file").addEventListener("change", e=>{
+    const f = e.target.files[0]; if(!f) return;
+    const r = new FileReader();
+    r.onload = ()=>{
+      try{
+        const obj = JSON.parse(r.result);
+        if(obj.logs) Object.assign(logs, obj.logs); // merge by date; imported wins on conflict
+        if(obj.settings){
+          // keep this device's non-empty settings; fill any blanks from the backup
+          ["name","coach","subject"].forEach(k=>{
+            if((settings[k]===undefined || settings[k]==="") && obj.settings[k]) settings[k] = obj.settings[k];
+          });
+        }
+        saveLogs(logs); saveSettings(settings);
+        renderSettings(); renderDaily(); toast("Backup imported & merged");
+      }catch(err){ toast("Invalid backup file"); }
+    };
+    r.readAsText(f); e.target.value="";
+  });
+  $("#s-clearday").addEventListener("click", ()=>{
+    if(confirm("Clear all data for "+curDate+"?")){ delete logs[curDate]; saveLogs(logs); renderDaily(); toast("Day cleared"); }
+  });
+
+  // ---------- init ----------
+  renderSettings(); renderDaily();
+})();
+</script>
+</body>
+</html>

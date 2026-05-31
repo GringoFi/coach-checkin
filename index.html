@@ -266,6 +266,30 @@
     </div>
 
     <div class="card">
+      <h2>Performance (today)</h2>
+      <p class="hint">Log daily so it's fresh for your weekly check-in.</p>
+      <div class="row">
+        <label class="field" style="margin:0"><span>Stamina &amp; energy in gym (1–10)</span><input type="number" id="d-stamina" min="1" max="10" inputmode="numeric" placeholder="1–10"></label>
+        <label class="field" style="margin:0"><span>Pumps (1–10)</span><input type="number" id="d-pumps" min="1" max="10" inputmode="numeric" placeholder="1–10"></label>
+      </div>
+      <label class="field"><span>Strength vs last session</span>
+        <select id="d-strength"><option value="">—</option><option>Regressing</option><option>Stagnant</option><option>Progressing</option></select>
+      </label>
+      <label class="field"><span>Energy during the day</span>
+        <select id="d-energy"><option value="">—</option><option>Increased</option><option>About the same</option><option>Decreased</option></select>
+      </label>
+      <div class="toggle" data-toggle="dSore"><div class="box">✓</div><div class="label">Sore &gt;2 days from a body part</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Digestion (today)</h2>
+      <label class="field" style="margin:0 0 12px"><span>Digestion / bloating / gas vs baseline</span>
+        <select id="d-digestion"><option value="">—</option><option>Better</option><option>Same</option><option>Worse</option></select>
+      </label>
+      <div class="toggle" data-toggle="dBM"><div class="box">✓</div><div class="label">Had a bowel movement (BM) today</div></div>
+    </div>
+
+    <div class="card">
       <h2>Daily Note</h2>
       <p class="hint">Anything worth flagging — rolls up into your weekly comments.</p>
       <textarea id="d-note" placeholder="• felt strong on squats&#10;• low energy after lunch"></textarea>
@@ -505,13 +529,15 @@
   function blankDay(){
     return { meals:[false,false,false,false], steps:"", waterMl:0,
       cardio:false, crossfit:false, weights:false, restDay:false,
-      weight:"", weightTime:"", sleep:"", supps:false, note:"", celebrated:false };
+      weight:"", weightTime:"", sleep:"", supps:false, note:"", celebrated:false,
+      dStamina:"", dPumps:"", dStrength:"", dEnergy:"", dSore:false, dDigestion:"", dBM:false };
   }
   function hasData(d){
     if(!d) return false;
     return (d.meals||[]).some(Boolean) || (d.steps!=="" && d.steps!=null) || (d.waterMl||0)>0 ||
       d.cardio||d.crossfit||d.weights||d.restDay || (d.weight!=="" && d.weight!=null) ||
-      (d.sleep!=="" && d.sleep!=null) || d.supps || (d.note && d.note.trim());
+      (d.sleep!=="" && d.sleep!=null) || d.supps || (d.note && d.note.trim()) ||
+      d.dStamina||d.dPumps||d.dStrength||d.dEnergy||d.dSore||d.dDigestion||d.dBM;
   }
   function goalsMet(d){
     let g=0;
@@ -588,10 +614,12 @@
   document.querySelectorAll("[data-water]").forEach(b=>{
     b.addEventListener("click", ()=>{ const day=getDay(); day.waterMl=Math.max(0,(day.waterMl||0)+parseInt(b.dataset.water,10)); setDay(day); renderDaily(); });
   });
-  function bindInput(id,key,opts){ opts=opts||{}; $(id).addEventListener("input", ()=>{ const day=getDay(); day[key]=$(id).value; setDay(day,true); if(opts.live) renderDaily(); }); }
+  function bindInput(id,key,opts){ opts=opts||{}; const el=$(id); const h=()=>{ const day=getDay(); day[key]=el.value; setDay(day,true); if(opts.live) renderDaily(); }; el.addEventListener("input",h); el.addEventListener("change",h); }
   bindInput("#d-steps","steps",{live:true});
   bindInput("#d-weight","weight"); bindInput("#d-weight-time","weightTime");
   bindInput("#d-sleep","sleep"); bindInput("#d-note","note");
+  bindInput("#d-stamina","dStamina"); bindInput("#d-pumps","dPumps");
+  bindInput("#d-strength","dStrength"); bindInput("#d-energy","dEnergy"); bindInput("#d-digestion","dDigestion");
   $("#d-date").addEventListener("change", ()=>{ curDate=$("#d-date").value||todayStr(); renderDaily(); });
   $("#d-save").addEventListener("click", ()=>{ saveLogs(); $("#d-saved").textContent="Saved ✓ "+curDate; toast("Day saved"); });
 
@@ -612,6 +640,8 @@
     document.querySelectorAll("[data-toggle]").forEach(t=>t.classList.toggle("checked",!!day[t.dataset.toggle]));
     $("#d-steps").value=day.steps||""; $("#d-weight").value=day.weight||"";
     $("#d-weight-time").value=day.weightTime||""; $("#d-sleep").value=day.sleep||""; $("#d-note").value=day.note||"";
+    $("#d-stamina").value=day.dStamina||""; $("#d-pumps").value=day.dPumps||"";
+    $("#d-strength").value=day.dStrength||""; $("#d-energy").value=day.dEnergy||""; $("#d-digestion").value=day.dDigestion||"";
     // bars
     const steps=parseInt(day.steps,10)||0, ml=day.waterMl||0;
     const sb=$("#d-steps-bar"); sb.style.width=Math.min(100,steps/10000*100)+"%"; sb.classList.toggle("full",steps>=STEP_GOAL);
@@ -756,6 +786,18 @@
     if(a.avgSleep!=null && !$("#w-sleep").value) $("#w-sleep").value="Avg "+a.avgSleep.toFixed(1)+" h this week.";
     const notes=last7().filter(d=>d.note&&d.note.trim()).map(d=>"• ("+fmtDate(d.key)+") "+d.note.trim().replace(/\n+/g," / "));
     if(notes.length && !$("#w-comments").value.trim()) $("#w-comments").value=notes.join("\n");
+    // roll up daily performance & digestion logs
+    const ds=last7();
+    const navg=k=>{ const vv=ds.map(d=>parseFloat(d[k])).filter(x=>!isNaN(x)); return vv.length?Math.round(vv.reduce((a,b)=>a+b,0)/vv.length):null; };
+    const latest=k=>{ for(let i=ds.length-1;i>=0;i--){ if(ds[i][k]) return ds[i][k]; } return ""; };
+    if(navg("dStamina")!=null && !$("#w-stamina").value) $("#w-stamina").value=navg("dStamina");
+    if(navg("dPumps")!=null && !$("#w-pumps").value) $("#w-pumps").value=navg("dPumps");
+    if(latest("dStrength") && !$("#w-strength").value) $("#w-strength").value=latest("dStrength");
+    if(latest("dEnergy") && !$("#w-dayenergy").value) $("#w-dayenergy").value=latest("dEnergy");
+    if(ds.length && !$("#w-soreness").value) $("#w-soreness").value=ds.some(d=>d.dSore)?"Yes":"No";
+    if(ds.length && !$("#w-bm").value){ const bm=ds.filter(d=>d.dBM).length; $("#w-bm").value=bm>=Math.ceil(ds.length/2)?"Yes":"No"; }
+    const dig=ds.map(d=>d.dDigestion).filter(Boolean);
+    if(dig.length && !$("#w-digestion").value){ const c={}; dig.forEach(x=>c[x]=(c[x]||0)+1); $("#w-digestion").value="Daily logs: "+Object.keys(c).map(k=>c[k]+"× "+k).join(", ")+"."; }
     updateDelta(); toast("Prefilled from this week");
   });
 
@@ -892,6 +934,7 @@
   function last(pts){ return pts.length?pts[pts.length-1].y:null; }
   function renderProgress(){
     const wt=weightSeries(), st=seriesFromLogs("steps"), sl=seriesFromLogs("sleep"), wa=seriesFromLogs("waterL"), di=seriesFromLogs("diet"), tw=trainingByWeek();
+    const sta=seriesFromLogs("dStamina"), pu=seriesFromLogs("dPumps");
     const a=weekAgg();
     const stat=[["Logged days",allDays().length],["Check-ins saved",checkins.length],["Best streak so far",bestStreak()+" d"],["This week diet",a.dietPct!=null?a.dietPct+"%":"—"]];
     $("#progressStats").innerHTML=stat.map(r=>'<div class="stat"><span>'+r[0]+'</span><b>'+r[1]+'</b></div>').join("");
@@ -901,7 +944,9 @@
     html+=chartCard("Sleep (h)", sl.length?last(sl).toFixed(1)+" h":null, lineChartSVG(sl,{color:"#a78bfa",unit:"",dp:1}));
     html+=chartCard("Water (L)", wa.length?last(wa).toFixed(1)+" L":null, lineChartSVG(wa,{color:"#34d399",unit:"",dp:1}));
     html+=chartCard("Diet adherence (%)", di.length?Math.round(last(di))+"%":null, lineChartSVG(di,{color:"#fbbf24",unit:"",dp:0}));
-    html+=chartCard("Training days / week", null, barChartSVG(tw,{color:"#f472b6"}));
+    html+=chartCard("Gym stamina (1–10)", sta.length?last(sta).toFixed(0):null, lineChartSVG(sta,{color:"#fb923c",dp:0}));
+    html+=chartCard("Pumps (1–10)", pu.length?last(pu).toFixed(0):null, lineChartSVG(pu,{color:"#f472b6",dp:0}));
+    html+=chartCard("Training days / week", null, barChartSVG(tw,{color:"#a78bfa"}));
     $("#charts").innerHTML=html;
   }
   function bestStreak(){

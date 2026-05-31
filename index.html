@@ -417,6 +417,8 @@
       <button class="btn" id="s-connect">🔗 Connect / sync now</button>
       <div class="dim" id="s-syncstatus" style="margin:10px 0;text-align:center">Not connected</div>
       <button class="btn secondary" id="s-coachlink" disabled>📋 Copy coach dashboard link</button>
+      <button class="btn secondary" id="s-pair">📱 Pair a new device (QR)</button>
+      <div id="pair-out" style="display:none;text-align:center;margin-top:6px"></div>
       <p class="dim" style="margin-top:10px">Need a token? GitHub → <b>Settings → Developer settings → Personal access tokens → Tokens (classic)</b> → Generate, check only the <b>gist</b> box, paste it above. Anyone with the coach link can view (no login); revoke anytime by deleting the gist or token in GitHub.</p>
     </div>
 
@@ -462,6 +464,7 @@
 <div class="toast" id="toast"></div>
 <canvas id="confetti"></canvas>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>
 (function(){
   "use strict";
@@ -1023,6 +1026,29 @@
   function coachURL(){ return settings.gistId ? new URL("dashboard.html?gist="+settings.gistId+(settings.ghUser?"&u="+settings.ghUser:""), location.href).href : ""; }
   function updateCoachLinkBtn(){ const b=$("#s-coachlink"); if(b){ b.disabled=!settings.gistId; b.style.opacity=settings.gistId?"1":".5"; } }
 
+  // ---------- DEVICE PAIRING (QR) ----------
+  function pairPayload(){ const o={t:settings.ghToken||"", g:settings.gistId||"", u:settings.ghUser||""}; return btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
+  function pairURL(){ return location.origin+location.pathname+"#pair="+encodeURIComponent(pairPayload()); }
+  function tryPairFromURL(){
+    const m=(location.hash||"").match(/pair=([^&]+)/); if(!m) return false;
+    try{ const o=JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1])))));
+      if(o.t){ settings.ghToken=o.t; if(o.g) settings.gistId=o.g; if(o.u) settings.ghUser=o.u; if(!settings.updatedAt) settings.updatedAt=0; saveSettings(); }
+      try{ history.replaceState(null,"",location.pathname); }catch(e){}
+      return true;
+    }catch(e){ return false; }
+  }
+  function showPairing(){
+    if(!settings.gistId||!settings.ghToken){ toast("Connect sync first"); return; }
+    const url=pairURL(), out=$("#pair-out"); let qrHTML="";
+    if(window.qrcode){ try{ const qr=qrcode(0,"L"); qr.addData(url); qr.make(); qrHTML=qr.createImgTag(4,10); }catch(e){ qrHTML=""; } }
+    out.innerHTML='<div style="background:#fff;display:inline-block;padding:12px;border-radius:12px;margin:8px auto 4px">'+(qrHTML||'<span style="color:#000;font-size:12px">QR needs a connection — use the link below</span>')+'</div>'
+      +'<div class="dim">Open your phone’s camera and point it at this code, then open the link.</div>'
+      +'<button class="btn secondary" id="pair-copy" style="margin-top:10px">📋 Copy pairing link instead</button>'
+      +'<p class="dim" style="margin-top:8px">⚠️ This code carries your token — only scan it with your own phone. It auto-clears from the address bar once opened.</p>';
+    out.style.display="block";
+    const pc=$("#pair-copy"); if(pc) pc.addEventListener("click", ()=>{ copyText(url); toast("Pairing link copied"); });
+  }
+
   // ---------- SETTINGS ----------
   function renderSettings(){ $("#s-name").value=settings.name||""; $("#s-coach").value=settings.coach||""; $("#s-subject").value=settings.subject||"Weekly Check-In";
     if($("#s-token")) $("#s-token").value=settings.ghToken||"";
@@ -1036,6 +1062,7 @@
   $("#s-save").addEventListener("click", ()=>{ settings.name=v("#s-name"); settings.coach=v("#s-coach"); settings.subject=v("#s-subject")||"Weekly Check-In"; saveSettings(); afterChange(); toast("Setup saved"); });
   $("#s-connect").addEventListener("click", connect);
   $("#s-coachlink").addEventListener("click", ()=>{ const u=coachURL(); if(!u){ toast("Connect sync first"); return; } copyText(u); toast("Coach link copied 📋"); });
+  $("#s-pair").addEventListener("click", showPairing);
   $("#s-export").addEventListener("click", ()=>{
     const data=JSON.stringify({version:3, settings, logs, checkins, workoutLogs:wlogs}, null, 2);
     const blob=new Blob([data],{type:"application/json"}); const url=URL.createObjectURL(blob);
@@ -1057,8 +1084,9 @@
   $("#s-clearday").addEventListener("click", ()=>{ if(confirm("Clear all data for "+curDate+"?")){ delete logs[curDate]; saveLogs(); renderDaily(); toast("Day cleared"); } });
 
   // ---------- init ----------
+  const _paired=tryPairFromURL();
   renderSettings(); renderWorkoutTabs(); renderWorkoutBody(); renderDaily();
-  if(settings.ghToken && settings.gistId) pull();
+  if(settings.ghToken && settings.gistId){ pull(); if(_paired) toast("📱 Paired — pulling your data…"); }
 })();
 </script>
 </body>

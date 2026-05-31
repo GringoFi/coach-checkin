@@ -411,6 +411,16 @@
     </div>
 
     <div class="card">
+      <h2>Online Sync &amp; Coach Dashboard</h2>
+      <p class="hint">Sync iPhone ↔ Mac and share a read-only dashboard with your coach. Uses a private GitHub gist; your token is stored on this device only — never online or in the code.</p>
+      <label class="field"><span>GitHub token (gist scope)</span><input type="password" id="s-token" placeholder="ghp_… or github_pat_…" autocomplete="off"></label>
+      <button class="btn" id="s-connect">🔗 Connect / sync now</button>
+      <div class="dim" id="s-syncstatus" style="margin:10px 0;text-align:center">Not connected</div>
+      <button class="btn secondary" id="s-coachlink" disabled>📋 Copy coach dashboard link</button>
+      <p class="dim" style="margin-top:10px">Need a token? GitHub → <b>Settings → Developer settings → Personal access tokens → Tokens (classic)</b> → Generate, check only the <b>gist</b> box, paste it above. Anyone with the coach link can view (no login); revoke anytime by deleting the gist or token in GitHub.</p>
+    </div>
+
+    <div class="card">
       <h2>Milestones</h2>
       <div class="badgegrid" id="badges"></div>
     </div>
@@ -457,12 +467,7 @@
   "use strict";
   const $ = s => document.querySelector(s);
   const LS = { logs:"cci_dailyLogs_v1", settings:"cci_settings_v1", checkins:"cci_checkins_v1", workoutLogs:"cci_workoutLogs_v1" };
-  const MEALS = [
-    {t:"Meal 1", s:"Beef/eggs + chicken/isolate + veg + fruit"},
-    {t:"Meal 2", s:"Chicken + rice + veg + fat"},
-    {t:"Meal 3", s:"Protein + carbs + fruit + fat"},
-    {t:"Meal 4", s:"Protein + carb + exchange + veg"}
-  ];
+  const MEALS = [ {t:"Meal 1",s:""}, {t:"Meal 2",s:""}, {t:"Meal 3",s:""}, {t:"Meal 4",s:""} ];
   const WATER_GOAL_ML = 3000, STEP_GOAL = 8000;
 
   const WORKOUTS = [
@@ -519,10 +524,12 @@
   let settings = load(LS.settings) || {};
   let checkins = load(LS.checkins) || [];
   let wlogs = load(LS.workoutLogs) || {};
-  function saveLogs(){ localStorage.setItem(LS.logs, JSON.stringify(logs)); }
+  let applyingRemote = false, pushTimer = null;
+  function afterChange(){ if(applyingRemote) return; if(settings.gistId && settings.ghToken){ settings.updatedAt = Date.now(); localStorage.setItem(LS.settings, JSON.stringify(settings)); schedulePush(); } }
+  function saveLogs(){ localStorage.setItem(LS.logs, JSON.stringify(logs)); afterChange(); }
   function saveSettings(){ localStorage.setItem(LS.settings, JSON.stringify(settings)); }
-  function saveCheckins(){ localStorage.setItem(LS.checkins, JSON.stringify(checkins)); }
-  function saveWlogs(){ localStorage.setItem(LS.workoutLogs, JSON.stringify(wlogs)); }
+  function saveCheckins(){ localStorage.setItem(LS.checkins, JSON.stringify(checkins)); afterChange(); }
+  function saveWlogs(){ localStorage.setItem(LS.workoutLogs, JSON.stringify(wlogs)); afterChange(); }
 
   function dateKey(d){ const off=d.getTimezoneOffset(); return new Date(d.getTime()-off*60000).toISOString().slice(0,10); }
   function todayStr(){ return dateKey(new Date()); }
@@ -604,7 +611,7 @@
   const mealsWrap=$("#meals");
   MEALS.forEach((m,i)=>{
     const el=document.createElement("div"); el.className="meal"; el.dataset.meal=i;
-    el.innerHTML='<div class="box">✓</div><div class="label">'+m.t+'<small>'+m.s+'</small></div>';
+    el.innerHTML='<div class="box">✓</div><div class="label">'+m.t+(m.s?'<small>'+m.s+'</small>':'')+'</div>';
     el.addEventListener("click", ()=>{ const day=getDay(); day.meals[i]=!day.meals[i]; setDay(day); renderDaily(); });
     mealsWrap.appendChild(el);
   });
@@ -956,15 +963,79 @@
     return best;
   }
 
+  // ---------- ONLINE SYNC (GitHub gist) ----------
+  const GIST_FILE="coach-checkin-data.json";
+  function syncStatus(m){ const e=$("#s-syncstatus"); if(e) e.textContent=m; }
+  function blobData(){ return { version:3, updatedAt: settings.updatedAt||Date.now(),
+    settings:{name:settings.name||"", coach:settings.coach||"", subject:settings.subject||""},
+    logs, checkins, workoutLogs:wlogs }; }
+  function mergeRemote(o){
+    applyingRemote=true;
+    if(o.logs) Object.keys(o.logs).forEach(k=>{ logs[k]=o.logs[k]; });
+    if(Array.isArray(o.checkins)){ const seen={}; checkins.concat(o.checkins).forEach(c=>{ seen[c.date]=c; }); checkins=Object.keys(seen).sort().map(k=>seen[k]); }
+    if(o.workoutLogs) Object.keys(o.workoutLogs).forEach(id=>{ const inc=o.workoutLogs[id]||[]; const cur=wlogs[id]||(wlogs[id]=[]); const bd={}; cur.concat(inc).forEach(e=>{ bd[e.date]=e; }); wlogs[id]=Object.keys(bd).sort().map(k=>bd[k]); });
+    if(o.settings){ ["name","coach","subject"].forEach(k=>{ if((settings[k]===undefined||settings[k]==="")&&o.settings[k]) settings[k]=o.settings[k]; }); }
+    saveLogs(); saveCheckins(); saveWlogs(); localStorage.setItem(LS.settings, JSON.stringify(settings));
+    applyingRemote=false;
+  }
+  async function pull(){
+    if(!settings.gistId) return;
+    try{ syncStatus("Checking cloud…");
+      const res=await fetch("https://api.github.com/gists/"+settings.gistId, {headers: settings.ghToken?{Authorization:"Bearer "+settings.ghToken}:{}});
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      const g=await res.json(); const f=g.files&&g.files[GIST_FILE]; if(!f){ syncStatus("Connected (no cloud data yet)"); return; }
+      const o=JSON.parse(f.content);
+      if((o.updatedAt||0) > (settings.updatedAt||0)){ mergeRemote(o); settings.updatedAt=o.updatedAt; saveSettings(); renderDaily(); renderWorkoutBody(); renderSettings(); syncStatus("Synced ✓ pulled latest "+new Date().toLocaleTimeString()); }
+      else syncStatus("Up to date ✓ "+new Date().toLocaleTimeString());
+    }catch(e){ syncStatus("Sync error: "+e.message); }
+  }
+  function schedulePush(){ clearTimeout(pushTimer); pushTimer=setTimeout(push, 1500); }
+  async function push(){
+    if(!settings.gistId || !settings.ghToken) return;
+    try{ syncStatus("Saving to cloud…");
+      const res=await fetch("https://api.github.com/gists/"+settings.gistId, {method:"PATCH",
+        headers:{Authorization:"Bearer "+settings.ghToken,"Content-Type":"application/json"},
+        body:JSON.stringify({files:{[GIST_FILE]:{content:JSON.stringify(blobData())}}}) });
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      syncStatus("Synced ✓ "+new Date().toLocaleTimeString());
+    }catch(e){ syncStatus("Sync error: "+e.message); }
+  }
+  async function createGist(){
+    const res=await fetch("https://api.github.com/gists",{method:"POST",
+      headers:{Authorization:"Bearer "+settings.ghToken,"Content-Type":"application/json"},
+      body:JSON.stringify({description:"Coach Check-In data (private)", public:false, files:{[GIST_FILE]:{content:JSON.stringify(blobData())}}}) });
+    if(!res.ok) throw new Error("Create failed: HTTP "+res.status);
+    const g=await res.json(); settings.gistId=g.id; settings.ghUser=(g.owner&&g.owner.login)||""; saveSettings(); return g;
+  }
+  async function connect(){
+    const tok=v("#s-token"); if(!tok){ syncStatus("Paste your token first."); return; }
+    settings.ghToken=tok; if(!settings.updatedAt) settings.updatedAt=Date.now(); saveSettings(); syncStatus("Connecting…");
+    try{
+      if(!settings.gistId){
+        const res=await fetch("https://api.github.com/gists?per_page=100",{headers:{Authorization:"Bearer "+tok}});
+        if(res.status===401) throw new Error("token rejected (401). Check the token and that it has the 'gist' scope.");
+        if(res.ok){ const list=await res.json(); const found=list.find(g=>g.files&&g.files[GIST_FILE]); if(found){ settings.gistId=found.id; settings.ghUser=(found.owner&&found.owner.login)||""; saveSettings(); } }
+      }
+      if(settings.gistId){ await pull(); await push(); } else { await createGist(); await push(); }
+      syncStatus("Connected ✓ auto-syncing is on."); updateCoachLinkBtn();
+    }catch(e){ syncStatus("Couldn't connect: "+e.message); }
+  }
+  function coachURL(){ return settings.gistId ? new URL("dashboard.html?gist="+settings.gistId+(settings.ghUser?"&u="+settings.ghUser:""), location.href).href : ""; }
+  function updateCoachLinkBtn(){ const b=$("#s-coachlink"); if(b){ b.disabled=!settings.gistId; b.style.opacity=settings.gistId?"1":".5"; } }
+
   // ---------- SETTINGS ----------
-  function renderSettings(){ $("#s-name").value=settings.name||""; $("#s-coach").value=settings.coach||""; $("#s-subject").value=settings.subject||"Weekly Check-In"; }
+  function renderSettings(){ $("#s-name").value=settings.name||""; $("#s-coach").value=settings.coach||""; $("#s-subject").value=settings.subject||"Weekly Check-In";
+    if($("#s-token")) $("#s-token").value=settings.ghToken||"";
+    if(settings.gistId) syncStatus("Connected ✓"); updateCoachLinkBtn(); }
   function renderBadges(){
     const logged=allDays().length, bs=bestStreak(), ci=checkins.length;
     const defs=[["First day",logged>=1],["3-day streak",bs>=3],["7-day streak",bs>=7],["14-day streak",bs>=14],["30-day streak",bs>=30],
       ["First check-in",ci>=1],["4 check-ins",ci>=4],["30 days logged",logged>=30]];
     $("#badges").innerHTML=defs.map(d=>'<span class="badge'+(d[1]?" on":"")+'">'+(d[1]?"🏅 ":"🔒 ")+d[0]+'</span>').join("");
   }
-  $("#s-save").addEventListener("click", ()=>{ settings.name=v("#s-name"); settings.coach=v("#s-coach"); settings.subject=v("#s-subject")||"Weekly Check-In"; saveSettings(); toast("Setup saved"); });
+  $("#s-save").addEventListener("click", ()=>{ settings.name=v("#s-name"); settings.coach=v("#s-coach"); settings.subject=v("#s-subject")||"Weekly Check-In"; saveSettings(); afterChange(); toast("Setup saved"); });
+  $("#s-connect").addEventListener("click", connect);
+  $("#s-coachlink").addEventListener("click", ()=>{ const u=coachURL(); if(!u){ toast("Connect sync first"); return; } copyText(u); toast("Coach link copied 📋"); });
   $("#s-export").addEventListener("click", ()=>{
     const data=JSON.stringify({version:3, settings, logs, checkins, workoutLogs:wlogs}, null, 2);
     const blob=new Blob([data],{type:"application/json"}); const url=URL.createObjectURL(blob);
@@ -987,6 +1058,7 @@
 
   // ---------- init ----------
   renderSettings(); renderWorkoutTabs(); renderWorkoutBody(); renderDaily();
+  if(settings.ghToken && settings.gistId) pull();
 })();
 </script>
 </body>

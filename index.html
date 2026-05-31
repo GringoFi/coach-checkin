@@ -124,6 +124,17 @@
   .ex .nm{font-weight:800;font-size:15px}
   .ex .sr{font-size:12px;font-weight:800;color:#04201d;background:var(--grad);padding:3px 9px;border-radius:999px;white-space:nowrap}
   .ex .cue{font-size:13px;color:var(--muted);margin-top:6px}
+  .exlog{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px}
+  .exlog .last{font-size:12px;color:var(--muted);margin-bottom:8px}
+  .exlog .last b{color:var(--accent)}
+  .loginputs{display:flex;gap:8px;align-items:center}
+  .loginputs input{padding:9px 10px;font-size:15px}
+  .loginputs .w-in{flex:1.2} .loginputs .r-in{flex:1}
+  .loginputs .logbtn{flex:0 0 auto;padding:9px 16px;border-radius:10px;border:none;background:var(--grad);color:#04201d;font-weight:800;cursor:pointer;font-family:inherit}
+  .histbtn{margin-top:8px;background:none;border:none;color:var(--accent);font-weight:700;font-size:12px;cursor:pointer;padding:2px 0;font-family:inherit}
+  .hist{margin-top:6px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:2px 10px}
+  .hrow{display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px dashed var(--line)}
+  .hrow:last-child{border-bottom:none} .hrow b{color:var(--text)}
   .restbar{font-size:12px;color:#fdba74;background:rgba(249,115,22,.10);border:1px solid rgba(249,115,22,.3);
     border-radius:10px;padding:10px 12px;margin-bottom:12px}
   /* charts */
@@ -421,7 +432,7 @@
 (function(){
   "use strict";
   const $ = s => document.querySelector(s);
-  const LS = { logs:"cci_dailyLogs_v1", settings:"cci_settings_v1", checkins:"cci_checkins_v1" };
+  const LS = { logs:"cci_dailyLogs_v1", settings:"cci_settings_v1", checkins:"cci_checkins_v1", workoutLogs:"cci_workoutLogs_v1" };
   const MEALS = [
     {t:"Meal 1", s:"Beef/eggs + chicken/isolate + veg + fruit"},
     {t:"Meal 2", s:"Chicken + rice + veg + fat"},
@@ -483,9 +494,11 @@
   let logs = load(LS.logs) || {};
   let settings = load(LS.settings) || {};
   let checkins = load(LS.checkins) || [];
+  let wlogs = load(LS.workoutLogs) || {};
   function saveLogs(){ localStorage.setItem(LS.logs, JSON.stringify(logs)); }
   function saveSettings(){ localStorage.setItem(LS.settings, JSON.stringify(settings)); }
   function saveCheckins(){ localStorage.setItem(LS.checkins, JSON.stringify(checkins)); }
+  function saveWlogs(){ localStorage.setItem(LS.workoutLogs, JSON.stringify(wlogs)); }
 
   function dateKey(d){ const off=d.getTimezoneOffset(); return new Date(d.getTime()-off*60000).toISOString().slice(0,10); }
   function todayStr(){ return dateKey(new Date()); }
@@ -633,12 +646,52 @@
       b.addEventListener("click", ()=>{ curWorkout=i; renderWorkoutTabs(); renderWorkoutBody(); });
       wrap.appendChild(b); });
   }
+  function exId(wid,name){ return wid+":"+name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""); }
+  function exHistory(id){ return (wlogs[id]||[]).slice().sort((a,b)=>a.date<b.date?-1:1); }
+  function exLast(id){ const h=exHistory(id); return h.length?h[h.length-1]:null; }
+  function logExercise(id,weight,reps){
+    weight=(weight||"").trim(); reps=(reps||"").trim();
+    if(!weight && !reps) return false;
+    const today=todayStr(); const arr=wlogs[id]||(wlogs[id]=[]);
+    const i=arr.findIndex(e=>e.date===today); const rec={date:today,weight,reps};
+    if(i>=0) arr[i]=rec; else arr.push(rec);
+    arr.sort((a,b)=>a.date<b.date?-1:1); saveWlogs(); return true;
+  }
+  function lastTxt(id){ const l=exLast(id);
+    return l ? ('Last: <b>'+(l.weight?l.weight+" lb":"")+(l.weight&&l.reps?" × ":"")+(l.reps?l.reps+" reps":"")+'</b> · '+fmtDate(l.date))
+             : 'No log yet — set your baseline 💪'; }
+  function histHTML(id){ const h=exHistory(id).reverse();
+    return h.length ? h.map(e=>'<div class="hrow"><span>'+fmtDate(e.date)+'</span><b>'+(e.weight?e.weight+" lb":"")+(e.weight&&e.reps?" × ":"")+(e.reps?e.reps+" reps":"")+'</b></div>').join("")
+                    : '<div class="dim" style="padding:8px 0">No history yet.</div>'; }
+  function updateExCard(card,id){ card.querySelector(".last").innerHTML=lastTxt(id); card.querySelector(".hist").innerHTML=histHTML(id); }
   function renderWorkoutBody(){
     $("#restNote").textContent=REST_NOTE;
     const w=WORKOUTS[curWorkout];
-    $("#workoutBody").innerHTML = '<div class="card"><h2>'+w.name+' · '+w.focus+'</h2>'
-      + w.ex.map(e=>'<div class="ex"><div class="top"><div class="nm">'+e.n+'</div><div class="sr">'+e.s+'</div></div><div class="cue">'+e.c+'</div></div>').join("")
-      + '</div>';
+    let html='<div class="card"><h2>'+w.name+' · '+w.focus+'</h2>';
+    w.ex.forEach(e=>{ const id=exId(w.id,e.n);
+      html+='<div class="ex" data-ex="'+id+'">'
+        +'<div class="top"><div class="nm">'+e.n+'</div><div class="sr">'+e.s+'</div></div>'
+        +'<div class="cue">'+e.c+'</div>'
+        +'<div class="exlog">'
+          +'<div class="last">'+lastTxt(id)+'</div>'
+          +'<div class="loginputs"><input class="w-in" type="number" inputmode="decimal" step="2.5" placeholder="lb"><input class="r-in" type="number" inputmode="numeric" placeholder="reps"><button class="logbtn" type="button">Log</button></div>'
+          +'<button class="histbtn" type="button">History ▾</button>'
+          +'<div class="hist" hidden>'+histHTML(id)+'</div>'
+        +'</div></div>';
+    });
+    html+='</div>';
+    $("#workoutBody").innerHTML=html;
+    $("#workoutBody").querySelectorAll(".ex").forEach(card=>{
+      const id=card.dataset.ex, wIn=card.querySelector(".w-in"), rIn=card.querySelector(".r-in");
+      const todayRec=(wlogs[id]||[]).find(e=>e.date===todayStr());
+      if(todayRec){ wIn.value=todayRec.weight||""; rIn.value=todayRec.reps||""; }
+      card.querySelector(".logbtn").addEventListener("click", ()=>{
+        if(logExercise(id,wIn.value,rIn.value)){ toast("Logged ✓"); updateExCard(card,id); }
+        else toast("Enter a weight or reps first");
+      });
+      const hb=card.querySelector(".histbtn");
+      hb.addEventListener("click", ()=>{ const h=card.querySelector(".hist"); const open=h.hidden; h.hidden=!open; hb.textContent=open?"History ▴":"History ▾"; });
+    });
   }
 
   // ---------- aggregation ----------
@@ -868,7 +921,7 @@
   }
   $("#s-save").addEventListener("click", ()=>{ settings.name=v("#s-name"); settings.coach=v("#s-coach"); settings.subject=v("#s-subject")||"Weekly Check-In"; saveSettings(); toast("Setup saved"); });
   $("#s-export").addEventListener("click", ()=>{
-    const data=JSON.stringify({version:2, settings, logs, checkins}, null, 2);
+    const data=JSON.stringify({version:3, settings, logs, checkins, workoutLogs:wlogs}, null, 2);
     const blob=new Blob([data],{type:"application/json"}); const url=URL.createObjectURL(blob);
     const a=document.createElement("a"); a.href=url; a.download="coach-checkin-backup-"+todayStr()+".json";
     document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(url),1000); toast("Backup exported");
@@ -880,7 +933,8 @@
       if(o.logs) Object.assign(logs,o.logs);
       if(Array.isArray(o.checkins)){ const seen={}; checkins.concat(o.checkins).forEach(c=>{ seen[c.date]=c; }); checkins=Object.keys(seen).sort().map(k=>seen[k]); }
       if(o.settings){ ["name","coach","subject"].forEach(k=>{ if((settings[k]===undefined||settings[k]==="")&&o.settings[k]) settings[k]=o.settings[k]; }); }
-      saveLogs(); saveSettings(); saveCheckins(); renderSettings(); renderDaily(); toast("Backup imported & merged");
+      if(o.workoutLogs){ Object.keys(o.workoutLogs).forEach(id=>{ const inc=o.workoutLogs[id]||[]; const cur=wlogs[id]||(wlogs[id]=[]); const byDate={}; cur.concat(inc).forEach(e=>{ byDate[e.date]=e; }); wlogs[id]=Object.keys(byDate).sort().map(k=>byDate[k]); }); }
+      saveLogs(); saveSettings(); saveCheckins(); saveWlogs(); renderSettings(); renderDaily(); renderWorkoutBody(); toast("Backup imported & merged");
     }catch(err){ toast("Invalid backup file"); } };
     r.readAsText(f); e.target.value="";
   });

@@ -393,10 +393,9 @@
 
     <div class="card">
       <h2>Send</h2>
-      <button class="btn" id="w-email">✉️ Open email to coach</button>
-      <button class="btn secondary" id="w-copy">⧉ Copy check-in text</button>
-      <button class="btn secondary" id="w-savecheckin">💾 Save check-in to history</button>
-      <p class="dim" style="margin-top:10px">Emailing or copying also saves this check-in, so next week's starting weight auto-fills from it.</p>
+      <button class="btn" id="w-email">📧 Send check-in to coach</button>
+      <p class="dim" style="margin-top:10px">One tap: <b>saves to history, copies the text, and opens your mail app</b> — all together. If your mail app doesn't open (e.g. iCloud webmail), it's already on your clipboard — just open iCloud Mail, start a message to your coach, and paste.</p>
+      <button class="btn secondary" id="w-copy" style="margin-top:12px">⧉ Copy text only (also saves)</button>
     </div>
   </section>
 
@@ -827,7 +826,6 @@
     checkins.sort((a,b)=>a.date<b.date?-1:1); saveCheckins();
     if(!silent) toast("✅ Check-in saved to history");
   }
-  $("#w-savecheckin").addEventListener("click", ()=>{ saveCheckin(); renderWeeklySummary(); });
 
   function buildText(){
     const a=weekAgg(), name=settings.name||"", L=[];
@@ -865,14 +863,16 @@
     const body=buildText();
     const subj=(settings.subject||"Weekly Check-In")+(settings.name?" — "+settings.name:"")+" — "+curDate;
     const to=settings.coach||"";
+    copyText(body, true); // always copy as a safety net (silent)
+    if(!to){ toast("Saved ✓ & copied. Add your coach's email in Setup to auto-open mail."); return; }
     const href="mailto:"+encodeURIComponent(to)+"?subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(body);
-    if(!to) toast("Add coach's email in Setup first");
-    if(href.length>1900){ copyText(body); toast("Long check-in — copied instead. Paste into email."); return; }
+    if(href.length>1900){ toast("Saved ✓ & copied — paste into a new email to your coach."); return; }
+    toast("Saved ✓ & copied. Opening your mail app…");
     window.location.href=href;
   });
-  function copyText(t){ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(()=>toast("Copied to clipboard"),()=>fallbackCopy(t)); } else fallbackCopy(t); }
-  function fallbackCopy(t){ const ta=document.createElement("textarea"); ta.value=t; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.focus(); ta.select(); try{document.execCommand("copy"); toast("Copied to clipboard");}catch(e){toast("Couldn't copy — select manually");} document.body.removeChild(ta); }
-  $("#w-copy").addEventListener("click", ()=>{ saveCheckin(true); copyText(buildText()); });
+  function copyText(t,silent){ const ok=()=>{ if(!silent) toast("Copied to clipboard"); }; if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(ok,()=>fallbackCopy(t,silent)); } else fallbackCopy(t,silent); }
+  function fallbackCopy(t,silent){ const ta=document.createElement("textarea"); ta.value=t; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.focus(); ta.select(); try{document.execCommand("copy"); if(!silent) toast("Copied to clipboard");}catch(e){toast("Couldn't copy — select manually");} document.body.removeChild(ta); }
+  $("#w-copy").addEventListener("click", ()=>{ saveCheckin(true); copyText(buildText()); toast("Saved ✓ & copied to clipboard"); });
 
   // ---------- PROGRESS ----------
   let curRange=90;

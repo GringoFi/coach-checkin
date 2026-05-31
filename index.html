@@ -970,6 +970,7 @@
 
   // ---------- ONLINE SYNC (GitHub gist) ----------
   const GIST_FILE="coach-checkin-data.json";
+  const APP_BASE="https://gringofi.github.io/coach-checkin/";
   function syncStatus(m){ const e=$("#s-syncstatus"); if(e) e.textContent=m; }
   function blobData(){ return { version:3, updatedAt: settings.updatedAt||Date.now(),
     settings:{name:settings.name||"", coach:settings.coach||"", subject:settings.subject||""},
@@ -1025,13 +1026,13 @@
       syncStatus("Connected ✓ auto-syncing is on."); updateCoachLinkBtn();
     }catch(e){ syncStatus("Couldn't connect: "+e.message); }
   }
-  function coachURL(){ return settings.gistId ? new URL("dashboard.html?gist="+settings.gistId+(settings.ghUser?"&u="+settings.ghUser:""), location.href).href : ""; }
+  function coachURL(){ return settings.gistId ? APP_BASE+"dashboard.html?gist="+settings.gistId+(settings.ghUser?"&u="+settings.ghUser:"") : ""; }
   function updateCoachLinkBtn(){ const b=$("#s-coachlink"); if(b){ b.disabled=!settings.gistId; b.style.opacity=settings.gistId?"1":".5"; } }
 
   // ---------- DEVICE PAIRING (QR) ----------
   function pairPayload(){ const o={t:settings.ghToken||"", g:settings.gistId||"", u:settings.ghUser||""}; return btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
-  function pairURL(){ return location.origin+location.pathname+"#pair="+encodeURIComponent(pairPayload()); }
-  function keepURL(){ return location.origin+location.pathname+"#keep="+encodeURIComponent(pairPayload()); }
+  function pairURL(){ return APP_BASE+"#pair="+encodeURIComponent(pairPayload()); }
+  function keepURL(){ return APP_BASE+"#keep="+encodeURIComponent(pairPayload()); }
   function applyPair(enc){
     try{ const o=JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(enc)))));
       if(o.t){ settings.ghToken=o.t; if(o.g) settings.gistId=o.g; if(o.u) settings.ghUser=o.u; if(!settings.updatedAt) settings.updatedAt=0; saveSettings(); return true; }

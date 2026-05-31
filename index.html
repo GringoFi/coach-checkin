@@ -418,6 +418,8 @@
       <button class="btn secondary" id="s-coachlink" disabled>📋 Copy coach dashboard link</button>
       <button class="btn secondary" id="s-pair">📱 Pair a new device (QR)</button>
       <div id="pair-out" style="display:none;text-align:center;margin-top:6px"></div>
+      <button class="btn secondary" id="s-keep">📌 Make a permanent phone link (stays connected)</button>
+      <div id="keep-out" style="display:none;text-align:center;margin-top:6px"></div>
       <p class="dim" style="margin-top:10px">Need a token? GitHub → <b>Settings → Developer settings → Personal access tokens → Tokens (classic)</b> → Generate, check only the <b>gist</b> box, paste it above. Anyone with the coach link can view (no login); revoke anytime by deleting the gist or token in GitHub.</p>
     </div>
 
@@ -1029,13 +1031,20 @@
   // ---------- DEVICE PAIRING (QR) ----------
   function pairPayload(){ const o={t:settings.ghToken||"", g:settings.gistId||"", u:settings.ghUser||""}; return btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
   function pairURL(){ return location.origin+location.pathname+"#pair="+encodeURIComponent(pairPayload()); }
-  function tryPairFromURL(){
-    const m=(location.hash||"").match(/pair=([^&]+)/); if(!m) return false;
-    try{ const o=JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1])))));
-      if(o.t){ settings.ghToken=o.t; if(o.g) settings.gistId=o.g; if(o.u) settings.ghUser=o.u; if(!settings.updatedAt) settings.updatedAt=0; saveSettings(); }
-      try{ history.replaceState(null,"",location.pathname); }catch(e){}
-      return true;
-    }catch(e){ return false; }
+  function keepURL(){ return location.origin+location.pathname+"#keep="+encodeURIComponent(pairPayload()); }
+  function applyPair(enc){
+    try{ const o=JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(enc)))));
+      if(o.t){ settings.ghToken=o.t; if(o.g) settings.gistId=o.g; if(o.u) settings.ghUser=o.u; if(!settings.updatedAt) settings.updatedAt=0; saveSettings(); return true; }
+    }catch(e){}
+    return false;
+  }
+  function tryAuthFromURL(){
+    const h=location.hash||"";
+    let m=h.match(/keep=([^&]+)/);
+    if(m){ return applyPair(m[1]) ? "keep" : false; } // permanent link: apply but KEEP the hash so the Home-Screen icon self-reconnects every launch
+    m=h.match(/pair=([^&]+)/);
+    if(m){ const ok=applyPair(m[1]); if(ok){ try{ history.replaceState(null,"",location.pathname); }catch(e){} } return ok?"pair":false; }
+    return false;
   }
   function showPairing(){
     if(!settings.gistId||!settings.ghToken){ toast("Connect sync first"); return; }
@@ -1047,6 +1056,17 @@
       +'<p class="dim" style="margin-top:8px">⚠️ This code carries your token — only scan it with your own phone. It auto-clears from the address bar once opened.</p>';
     out.style.display="block";
     const pc=$("#pair-copy"); if(pc) pc.addEventListener("click", ()=>{ copyText(url); toast("Pairing link copied"); });
+  }
+  function showPermanent(){
+    if(!settings.gistId||!settings.ghToken){ toast("Connect sync first"); return; }
+    const url=keepURL(), out=$("#keep-out"); let qrHTML="";
+    if(window.qrcode){ try{ const qr=qrcode(0,"L"); qr.addData(url); qr.make(); qrHTML=qr.createImgTag(4,10); }catch(e){ qrHTML=""; } }
+    out.innerHTML='<div class="dim" style="margin-bottom:8px;text-align:left">On your <b>phone</b>: open this link, then <b>Share → Add to Home Screen</b>. Always open the app from <b>that icon</b> — it stays connected even if your phone clears its storage.</div>'
+      +(qrHTML?'<div style="background:#fff;display:inline-block;padding:12px;border-radius:12px;margin:4px auto">'+qrHTML+'</div><div class="dim">Scan with your phone camera to open it there.</div>':'')
+      +'<button class="btn secondary" id="keep-copy" style="margin-top:10px">📋 Copy permanent link</button>'
+      +'<p class="dim" style="margin-top:8px">⚠️ This link contains your token — keep it to your own phone. The Home-Screen icon made from it is your everyday app.</p>';
+    out.style.display="block";
+    const kc=$("#keep-copy"); if(kc) kc.addEventListener("click", ()=>{ copyText(url); toast("Permanent link copied"); });
   }
 
   // ---------- SETTINGS ----------
@@ -1063,6 +1083,7 @@
   $("#s-connect").addEventListener("click", connect);
   $("#s-coachlink").addEventListener("click", ()=>{ const u=coachURL(); if(!u){ toast("Connect sync first"); return; } copyText(u); toast("Coach link copied 📋"); });
   $("#s-pair").addEventListener("click", showPairing);
+  $("#s-keep").addEventListener("click", showPermanent);
   $("#s-export").addEventListener("click", ()=>{
     const data=JSON.stringify({version:3, settings, logs, checkins, workoutLogs:wlogs}, null, 2);
     const blob=new Blob([data],{type:"application/json"}); const url=URL.createObjectURL(blob);
@@ -1084,9 +1105,9 @@
   $("#s-clearday").addEventListener("click", ()=>{ if(confirm("Clear all data for "+curDate+"?")){ delete logs[curDate]; saveLogs(); renderDaily(); toast("Day cleared"); } });
 
   // ---------- init ----------
-  const _paired=tryPairFromURL();
+  const _auth=tryAuthFromURL();
   renderSettings(); renderWorkoutTabs(); renderWorkoutBody(); renderDaily();
-  if(settings.ghToken && settings.gistId){ pull(); if(_paired) toast("📱 Paired — pulling your data…"); }
+  if(settings.ghToken && settings.gistId){ pull(); if(_auth) toast("🔗 Reconnected — pulling your data…"); }
 })();
 </script>
 </body>
